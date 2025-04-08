@@ -10,7 +10,7 @@ public class MySQLConnection {
         // Replace with your database details
         String url = "jdbc:mysql://localhost:3306/TeamFlow"; // Ensure your DB name is correct
         String user = "root"; // Replace with your MySQL username
-        String password = "Pannenkoek1!"; // Replace with your MySQL password
+        String password = "Password"; // Replace with your MySQL password
 
         try {
             // Register MySQL JDBC driver (optional but good practice)
