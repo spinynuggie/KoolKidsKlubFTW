@@ -390,7 +390,7 @@ class TrelloBoard {
             String reviewid = i < reviewTasks.size() ? "id:" + taskList.indexOf(reviewTasks.get(i)) : "";
             String doneid = i < doneTasks.size() ? "id:" + taskList.indexOf(doneTasks.get(i)) : "";
 
-            System.out.printf("%-20s %-20s %-20s %-20s\n", 
+            System.out.printf("%-20s | %-20s | %-20s | %-20s\n", 
                 todo.isEmpty() ? "" : todo + " " + todoid,
                 inProgress.isEmpty() ? "" : inProgress + " " + inProgressid,
                 review.isEmpty() ? "" : review + " " + reviewid,
