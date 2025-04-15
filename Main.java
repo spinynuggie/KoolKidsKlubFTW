@@ -1,6 +1,11 @@
 import java.util.ArrayList;
 import java.util.Scanner;
 
+import java.sql.*;
+
+class Berigtidteller {
+    public static int berichtId = 0;
+}
 
 public class Main {
     private static ArrayList<User> users = new ArrayList<>();
@@ -226,11 +231,33 @@ public class Main {
                                             } else {
                                                 System.out.print("Voer het bericht in: ");
                                                 String berichtje = scanner.nextLine();
-                            
-                                                for (User ontvanger : ontvangers) {
-                                                    ontvanger.ontvangbericht("Bericht van " + ingelochtals + ": " + berichtje);
+                                                
+                                                // vraag om te checken of je een task wilt toevoegen
+                                                System.out.print("Wil je een task toe voegen? (ja/nee): ");
+                                                String antwoord = scanner.nextLine();
+                                                
+                                                if (antwoord.equalsIgnoreCase("ja")) {
+                                                    // Toont de taken zodat de gebruiker een id kan kiezen
+                                                    board.showTasks();
+                                                    System.out.print("Voer de id van de task in: ");
+                                                    int taskId = scanner.nextInt();
+                                                    scanner.nextLine(); // Consumeer de newline
+                                                
+                                                    // Maak een nieuw berichtje (voorbeeld met drie parameters, bv. id, inhoud en taskId)
+                                                    berichtje nieuwBericht = new berichtje(Berigtidteller.berichtId, ingelochtals, berichtje, taskId); 
+                                                    System.out.println("Nieuw berichtje aangemaakt: " + nieuwBericht.getBerichtje());
+                                                } else {
+                                                    // Als antwoord niet 'ja' is, maak dan een berichtje met twee parameters (bv. id en bericht)
+                                                    berichtje nieuwBericht = new berichtje(Berigtidteller.berichtId, ingelochtals, berichtje);
+                                                    System.out.println("Nieuw berichtje aangemaakt: " + nieuwBericht.getBerichtje());
                                                 }
-                            
+                                                
+
+                                                for (User ontvanger : ontvangers) {
+                                                    ontvanger.ontvangberichtid(Berigtidteller.berichtId);
+                                                }
+
+                                                Berigtidteller.berichtId++;
                                                 System.out.println("Bericht verstuurd naar alle ontvangers!");
                                             }
                                         }
@@ -294,7 +321,7 @@ class User {
     private String name;
     private String email;
     private String password;
-    private ArrayList<String> berichtjes = new ArrayList<>();
+    private ArrayList<Integer> berichtjesids = new ArrayList<>();
 
     public User(String name, String email, String password) {
         this.name = name;
@@ -303,15 +330,15 @@ class User {
     }
 
     public String[] getBerichtjes() {
-        for (int i = 0; i < berichtjes.size(); i++) {
-            System.out.println(i + ": " + berichtjes.get(i));
+        for (int i = 0; i < berichtjesids.size(); i++) {
+            System.out.println(i + ": " + berichtjesids.get(i));
         }
-        return berichtjes.toArray(new String[0]);
+        return berichtjesids.toArray(new String[0]);
         
     }
 
-    public void ontvangbericht(String berichtje) {
-        berichtjes.add(berichtje);
+    public void ontvangberichtid(int berichtjeid) {
+        berichtjesids.add(berichtjeid);
     }
 
     public String getName() {
@@ -458,6 +485,48 @@ class Task {
     @Override
     public String toString() {
         return "Taak: " + name + ", Beschrijving: " + description + ", Status: " + status;
+    }
+}
+
+class berichtje {
+    // Statische teller voor het automatisch genereren van een id
+   
+
+    private int id;
+    private String berichtje;
+    private int taskid; // Standaardwaarde voor taskid
+    private String afzender;
+
+    // Constructor voor berichtje zonder taskid (twee parameters)
+    public berichtje(int id, String afzender, String berichtje) {
+        this.id = id;
+        this.afzender = afzender;
+        this.berichtje = berichtje;
+        
+    }
+
+    // Constructor voor berichtje met taskid (drie parameters)
+    public berichtje(int id, String afzender, String berichtje, int taskid) {
+        this.id = id;
+        this.afzender = afzender;
+        this.berichtje = berichtje;
+        this.taskid = taskid;
+    }
+
+    public int getId() {
+        return id;
+    }
+
+    public String getBerichtje() {
+        return berichtje;
+    }
+
+    public int getTaskid() {
+        return taskid;
+    }
+
+    public void printberigtje() {
+        System.out.println("Bericht van " + afzender + ": " + berichtje);
     }
 }
 
