@@ -169,16 +169,15 @@ public class Main {
                                 }
                             }
                             case 4 -> {// Berichtjes bekijken
-                                System.out.print("Voer je naam in: ");
-                                System.out.println(ingelochtals);
                                 boolean gevonden = false;
                                 for (User user : users) {
                                     if(user.getName().equals(ingelochtals)){
                                         int maxBerichtjes = 10; // Maximum aantal berichtjes om te tonen
                                         int teller = 0;
                                         
-                                        for (String berichtje : user.getBerichtjes()) {
-                                            System.out.println(berichtje);
+                                        for (int berichtjeid : user.getBerichtjesid()) {
+                                            System.out.println(berichtjeid);
+                                            // Hier moet code komen die het berichtje met SQL: SELECT * FROM berichtjes WHERE id=berichtjeid; geeft
                                             teller++;
                                             if (teller >= maxBerichtjes) {
                                                 break; // Stop de loop als het maximum is bereikt
@@ -235,7 +234,7 @@ public class Main {
                                                 // vraag om te checken of je een task wilt toevoegen
                                                 System.out.print("Wil je een task toe voegen? (ja/nee): ");
                                                 String antwoord = scanner.nextLine();
-                                                
+                                                berichtje nieuwBericht;
                                                 if (antwoord.equalsIgnoreCase("ja")) {
                                                     // Toont de taken zodat de gebruiker een id kan kiezen
                                                     board.showTasks();
@@ -244,11 +243,11 @@ public class Main {
                                                     scanner.nextLine(); // Consumeer de newline
                                                 
                                                     // Maak een nieuw berichtje (voorbeeld met drie parameters, bv. id, inhoud en taskId)
-                                                    berichtje nieuwBericht = new berichtje(Berigtidteller.berichtId, ingelochtals, berichtje, taskId); 
+                                                    nieuwBericht = new berichtje(Berigtidteller.berichtId, ingelochtals, berichtje, taskId); 
                                                     System.out.println("Nieuw berichtje aangemaakt: " + nieuwBericht.getBerichtje());
                                                 } else {
                                                     // Als antwoord niet 'ja' is, maak dan een berichtje met twee parameters (bv. id en bericht)
-                                                    berichtje nieuwBericht = new berichtje(Berigtidteller.berichtId, ingelochtals, berichtje);
+                                                    nieuwBericht = new berichtje(Berigtidteller.berichtId, ingelochtals, berichtje);
                                                     System.out.println("Nieuw berichtje aangemaakt: " + nieuwBericht.getBerichtje());
                                                 }
                                                 
@@ -258,6 +257,8 @@ public class Main {
                                                 }
 
                                                 Berigtidteller.berichtId++;
+                                                // Zet het berichtje in de database
+                                                nieuwBericht.zetBerichtInDatabase();
                                                 System.out.println("Bericht verstuurd naar alle ontvangers!");
                                             }
                                         }
@@ -329,12 +330,11 @@ class User {
         this.password = password;
     }
 
-    public String[] getBerichtjes() {
+    public int[] getBerichtjesid() {
         for (int i = 0; i < berichtjesids.size(); i++) {
             System.out.println(i + ": " + berichtjesids.get(i));
         }
-        return berichtjesids.toArray(new String[0]);
-        
+        return berichtjesids.stream().mapToInt(Integer::intValue).toArray();
     }
 
     public void ontvangberichtid(int berichtjeid) {
@@ -494,7 +494,7 @@ class berichtje {
 
     private int id;
     private String berichtje;
-    private int taskid; // Standaardwaarde voor taskid
+    private Integer taskid; // Gebruik Integer in plaats van int om null toe te staan
     private String afzender;
 
     // Constructor voor berichtje zonder taskid (twee parameters)
@@ -513,6 +513,8 @@ class berichtje {
         this.taskid = taskid;
     }
 
+    
+
     public int getId() {
         return id;
     }
@@ -528,6 +530,33 @@ class berichtje {
     public void printberigtje() {
         System.out.println("Bericht van " + afzender + ": " + berichtje);
     }
+
+     // Methode om dit berichtje in de database te stoppen
+    // Methode om dit berichtje in de database te stoppen
+public void zetBerichtInDatabase() {
+    // Correcte URL, ervan uitgaande dat de database in subfolder "sqlite3" staat
+    String url = "jdbc:sqlite:sqlite3/teamflow.db";
+    // Zorg ervoor dat je alle kolommen invult: id, afzender, berichtje, taskid
+    String sql = "INSERT INTO berichtjes (id, afzender, berichtje, taskid) VALUES (?, ?, ?, ?)";
+    
+    try (Connection conn = DriverManager.getConnection(url);
+         PreparedStatement pstmt = conn.prepareStatement(sql)) {
+         
+         pstmt.setInt(1, this.id);
+         pstmt.setString(2, this.afzender);
+         pstmt.setString(3, this.berichtje);
+         if (this.taskid == null) {
+             pstmt.setNull(4, java.sql.Types.INTEGER);
+         } else {
+             pstmt.setInt(4, this.taskid);
+         }
+         
+         pstmt.executeUpdate();
+         System.out.println("Bericht succesvol opgeslagen in de database.");
+    } catch (SQLException e) {
+         System.out.println("Fout bij opslaan bericht: " + e.getMessage());
+    }
+}
 }
 
 enum TaskStatus {
