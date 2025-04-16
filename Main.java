@@ -3,18 +3,64 @@ import java.util.Scanner;
 
 import java.sql.*;
 
-class Berigtidteller {
-    public static int berichtId = 0;
-}
+
 
 public class Main {
     private static ArrayList<User> users = new ArrayList<>();
     
+    public static void toonBerichtById(int berichtId) {
+        // URL naar de database in de subfolder "sqlite3"
+        String url = "jdbc:sqlite:sqlite3/teamflow.db";
+        String sql = "SELECT * FROM berichtjes WHERE id = ?";
+        
+        try (Connection conn = DriverManager.getConnection(url);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+             
+             pstmt.setInt(1, berichtId);
+             ResultSet rs = pstmt.executeQuery();
+             
+             if (rs.next()) {
+                 // Haal de kolomnamen op (afhankelijk van je tabeldefinitie)
+                 int id = rs.getInt("id");
+                 String afzender = rs.getString("afzender");
+                 String bericht = rs.getString("berichtje");
+                 int taskid = rs.getInt("taskid"); // taskid kan hier 0 of de standaardwaarde zijn als NULL
+                 
+                 System.out.println("id: " + id + ", afzender: " + afzender +
+                                    ", berichtje: " + bericht + ", taskid: " + taskid);
+             } else {
+                 System.out.println("Geen bericht gevonden met id: " + berichtId);
+             }
+             rs.close();
+        } catch (SQLException e) {
+             System.out.println("Fout bij selectie bericht: " + e.getMessage());
+        }
+    }
+    
+    public static int getNextBerichtId() {
+        String url = "jdbc:sqlite:sqlite3/teamflow.db";
+        String sql = "SELECT MAX(id) AS maxId FROM berichtjes";
+        
+        try (Connection conn = DriverManager.getConnection(url);
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+             
+             int nextId = 1; // Start met 1 als er nog geen berichten zijn
+             if (rs.next()) {
+                 nextId = rs.getInt("maxId") + 1;
+             }
+             return nextId;
+        } catch (SQLException e) {
+             System.out.println("Fout bij ophalen hoogste bericht id: " + e.getMessage());
+             return -1;
+        }
+    }
+   
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
         TrelloBoard board = new TrelloBoard("School Project");
 
-        String ingelochtals = "";
+        String ingelochtals = "gest";
         boolean kleinmenu = true;
         boolean kleinmenu2 = true;
          
@@ -128,9 +174,10 @@ public class Main {
                                 String email = scanner.nextLine();
                                 System.out.print("Voer een wachtwoord in: ");
                                 String wachtwoord = scanner.nextLine();
-                                users.add(new User(naam, email, wachtwoord));
+                                User newuser = new User(naam, email, wachtwoord);
+                                users.add(newuser);
                                 ingelochtals = naam;
-                                
+                                newuser.insertUserIntoDatabase();
                             }
                             case 2 -> {// user daliten
                                 System.out.print("Voer de naam van de user in die je wilt verwijderen: ");
@@ -176,8 +223,9 @@ public class Main {
                                         int teller = 0;
                                         
                                         for (int berichtjeid : user.getBerichtjesid()) {
-                                            System.out.println(berichtjeid);
+                                            toonBerichtById(berichtjeid);
                                             // Hier moet code komen die het berichtje met SQL: SELECT * FROM berichtjes WHERE id=berichtjeid; geeft
+                                            
                                             teller++;
                                             if (teller >= maxBerichtjes) {
                                                 break; // Stop de loop als het maximum is bereikt
@@ -243,20 +291,19 @@ public class Main {
                                                     scanner.nextLine(); // Consumeer de newline
                                                 
                                                     // Maak een nieuw berichtje (voorbeeld met drie parameters, bv. id, inhoud en taskId)
-                                                    nieuwBericht = new berichtje(Berigtidteller.berichtId, ingelochtals, berichtje, taskId); 
+                                                    nieuwBericht = new berichtje(getNextBerichtId(), ingelochtals, berichtje, taskId); 
                                                     System.out.println("Nieuw berichtje aangemaakt: " + nieuwBericht.getBerichtje());
                                                 } else {
                                                     // Als antwoord niet 'ja' is, maak dan een berichtje met twee parameters (bv. id en bericht)
-                                                    nieuwBericht = new berichtje(Berigtidteller.berichtId, ingelochtals, berichtje);
+                                                    nieuwBericht = new berichtje(getNextBerichtId(), ingelochtals, berichtje);
                                                     System.out.println("Nieuw berichtje aangemaakt: " + nieuwBericht.getBerichtje());
                                                 }
                                                 
 
                                                 for (User ontvanger : ontvangers) {
-                                                    ontvanger.ontvangberichtid(Berigtidteller.berichtId);
+                                                    ontvanger.ontvangberichtid(getNextBerichtId());
                                                 }
 
-                                                Berigtidteller.berichtId++;
                                                 // Zet het berichtje in de database
                                                 nieuwBericht.zetBerichtInDatabase();
                                                 System.out.println("Bericht verstuurd naar alle ontvangers!");
@@ -330,6 +377,29 @@ class User {
         this.password = password;
     }
 
+    public Integer getid() {
+    
+        String url = "jdbc:sqlite:sqlite3/teamflow.db";
+        String sql = "SELECT id FROM users WHERE name = ?";
+        
+        try (Connection conn = DriverManager.getConnection(url);
+                PreparedStatement pstmt = conn.prepareStatement(sql)) {
+                
+                pstmt.setString(1, name);
+                ResultSet rs = pstmt.executeQuery();
+                if (rs.next()) {
+                    return rs.getInt("id");
+                } else {
+                    System.out.println("User met naam " + name + " niet gevonden.");
+                    return null;
+                }
+        } catch (SQLException e) {
+                System.out.println("Fout bij ophalen user id: " + e.getMessage());
+                return null;
+        }
+    
+    }
+
     public int[] getBerichtjesid() {
         for (int i = 0; i < berichtjesids.size(); i++) {
             System.out.println(i + ": " + berichtjesids.get(i));
@@ -339,6 +409,23 @@ class User {
 
     public void ontvangberichtid(int berichtjeid) {
         berichtjesids.add(berichtjeid);
+        insertUserBerichtLink(getid(),berichtjeid);
+    }
+
+    public static void insertUserBerichtLink(Integer userId, int berichtId) {
+        String url = "jdbc:sqlite:sqlite3/teamflow.db";
+        String sql = "INSERT INTO user_berichtjes (user_id, bericht_id) VALUES (?, ?)";
+        
+        try (Connection conn = DriverManager.getConnection(url);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+             
+             pstmt.setInt(1, userId);
+             pstmt.setInt(2, berichtId);
+             pstmt.executeUpdate();
+             System.out.println("Koppeling tussen user en bericht succesvol in de database gezet.");
+        } catch (SQLException e) {
+             System.out.println("Fout bij het invoegen in user_berichtjes: " + e.getMessage());
+        }
     }
 
     public String getName() {
@@ -351,6 +438,49 @@ class User {
 
     public String getPassword() {
         return password;
+    }
+
+    public void insertUserIntoDatabase() {
+        // URL naar de database (pas aan als dat nodig is)
+        String url = "jdbc:sqlite:sqlite3/teamflow.db";
+        // SQL-statement om de user toe te voegen
+        String sqlUser = "INSERT INTO users (name, email, password) VALUES (?, ?, ?)";
+        
+        try (Connection conn = DriverManager.getConnection(url);
+            // Geef aan dat we de gegenereerde keys willen terugkrijgen
+            PreparedStatement pstmtUser = conn.prepareStatement(sqlUser, Statement.RETURN_GENERATED_KEYS)) {
+            
+            pstmtUser.setString(1, name);
+            pstmtUser.setString(2, email);
+            pstmtUser.setString(3, password);
+            
+            pstmtUser.executeUpdate();
+             
+            // Verkrijg de automatisch gegenereerde user_id
+            ResultSet rs = pstmtUser.getGeneratedKeys();
+            if (rs.next()) {
+                int userId = rs.getInt(1);
+                
+                                
+                // SQL-statement om in de associatietabel te inserten
+                String sqlUserBerichtjes = "INSERT INTO user_berichtjes (user_id, bericht_id) VALUES (?, ?)";
+                
+                // Voor elke bericht-id in de lijst een koppeling toevoegen
+                for (int berichtId : berichtjesids) {
+                    try (PreparedStatement pstmtLink = conn.prepareStatement(sqlUserBerichtjes)) {
+                        pstmtLink.setInt(1, userId);
+                        pstmtLink.setInt(2, berichtId);
+                        pstmtLink.executeUpdate();
+                    }
+                }
+                System.out.println("User en gekoppelde berichtjes succesvol in de database gezet.");
+            } else {
+                System.out.println("Geen user_id teruggekregen. User is mogelijk niet toegevoegd.");
+            }
+            rs.close();
+        } catch (SQLException e) {
+            System.out.println("Fout bij het invoegen van de user: " + e.getMessage());
+        }
     }
 }
 
@@ -533,30 +663,30 @@ class berichtje {
 
      // Methode om dit berichtje in de database te stoppen
     // Methode om dit berichtje in de database te stoppen
-public void zetBerichtInDatabase() {
-    // Correcte URL, ervan uitgaande dat de database in subfolder "sqlite3" staat
-    String url = "jdbc:sqlite:sqlite3/teamflow.db";
-    // Zorg ervoor dat je alle kolommen invult: id, afzender, berichtje, taskid
-    String sql = "INSERT INTO berichtjes (id, afzender, berichtje, taskid) VALUES (?, ?, ?, ?)";
-    
-    try (Connection conn = DriverManager.getConnection(url);
-         PreparedStatement pstmt = conn.prepareStatement(sql)) {
-         
-         pstmt.setInt(1, this.id);
-         pstmt.setString(2, this.afzender);
-         pstmt.setString(3, this.berichtje);
-         if (this.taskid == null) {
-             pstmt.setNull(4, java.sql.Types.INTEGER);
-         } else {
-             pstmt.setInt(4, this.taskid);
-         }
-         
-         pstmt.executeUpdate();
-         System.out.println("Bericht succesvol opgeslagen in de database.");
-    } catch (SQLException e) {
-         System.out.println("Fout bij opslaan bericht: " + e.getMessage());
+    public void zetBerichtInDatabase() {
+        // Correcte URL, ervan uitgaande dat de database in subfolder "sqlite3" staat
+        String url = "jdbc:sqlite:sqlite3/teamflow.db";
+        // Zorg ervoor dat je alle kolommen invult: id, afzender, berichtje, taskid
+        String sql = "INSERT INTO berichtjes (id, afzender, berichtje, taskid) VALUES (?, ?, ?, ?)";
+        
+        try (Connection conn = DriverManager.getConnection(url);
+            PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            
+            pstmt.setInt(1, this.id);
+            pstmt.setString(2, this.afzender);
+            pstmt.setString(3, this.berichtje);
+            if (this.taskid == null) {
+                pstmt.setNull(4, java.sql.Types.INTEGER);
+            } else {
+                pstmt.setInt(4, this.taskid);
+            }
+            
+            pstmt.executeUpdate();
+            System.out.println("Bericht succesvol opgeslagen in de database.");
+        } catch (SQLException e) {
+            System.out.println("Fout bij opslaan bericht: " + e.getMessage());
+        }
     }
-}
 }
 
 enum TaskStatus {
