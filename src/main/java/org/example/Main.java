@@ -1,4 +1,10 @@
 import java.util.ArrayList;
+import java.util.List;
+import java.util.Scanner;
+import java.sql.*;
+
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Scanner;
 import java.sql.*;
 
@@ -16,12 +22,14 @@ public class Main {
         users = User.loadUsersFromDatabase();
 
         String ingelochtals = "gast";
-        boolean kleinmenu = true;
-        boolean kleinmenu2 = true;
+        boolean kleinmenu, kleinmenu2;
 
         while (true) {
+            // Toon wie er ingelogd is
+            System.out.println("\n=== Ingelogd als: " + ingelochtals + " ===");
+
             kleinmenu = true;
-            System.out.println("\nWat wil je doen?");
+            System.out.println("Wat wil je doen?");
             System.out.println("1. Taak aanmaken");
             System.out.println("2. Taak verplaatsen");
             System.out.println("3. Taak verwijderen");
@@ -77,8 +85,13 @@ public class Main {
                             yield TaskStatus.TODO;
                         }
                     };
-                    board.updateTaskStatus(taakIdVerplaats, nieuweStatus);
-                    System.out.println("Taakstatus bijgewerkt!");
+                    boolean updated = board.updateTaskStatus(taakIdVerplaats, nieuweStatus);
+                    if (updated) {
+                        System.out.println("Taakstatus bijgewerkt!");
+                        board.showTasks();
+                    } else {
+                        System.out.println("Geen taak gevonden met ID " + taakIdVerplaats + ".");
+                    }
                     break;
 
                 case 3: // Taak verwijderen
@@ -109,7 +122,8 @@ public class Main {
                 case 6: // User menu
                     while (kleinmenu) {
                         kleinmenu2 = true;
-                        System.out.println("\nUser menu:");
+                        // Toon wie er in het user-menu is ingelogd
+                        System.out.println("\n=== User-menu (ingelogd als: " + ingelochtals + ") ===");
                         System.out.println("1. User aanmaken");
                         System.out.println("2. User verwijderen");
                         System.out.println("3. Inloggen als user");
@@ -140,7 +154,6 @@ public class Main {
                                 String delNaam = scanner.nextLine();
                                 boolean verwijderd = users.removeIf(u -> u.getName().equals(delNaam));
                                 if (verwijderd) {
-                                    // optioneel: delete uit DB, maak dan een methode deleteUserFromDatabase()
                                     System.out.println("User \"" + delNaam + "\" verwijderd uit geheugen.");
                                 } else {
                                     System.out.println("User niet gevonden.");
@@ -389,9 +402,12 @@ class TrelloBoard {
     private String name;
     private ArrayList<Task> taskList = new ArrayList<>();
 
-    public TrelloBoard(String name) { this.name = name; }
+    public TrelloBoard(String name) {
+        this.name = name;
+    }
 
     public void loadTasksFromDatabase() {
+        taskList.clear(); // eerst leegmaken
         String url = "jdbc:sqlite:sqlite3/teamflow.db";
         String sql = "SELECT id, naam, beschrijving, status FROM tasks";
         try (Connection conn = DriverManager.getConnection(url);
@@ -410,17 +426,19 @@ class TrelloBoard {
         }
     }
 
-    public void addTask(Task t) { taskList.add(t); }
+    public void addTask(Task t) {
+        taskList.add(t);
+    }
 
-    public void updateTaskStatus(int taskId, TaskStatus newStatus) {
+    public boolean updateTaskStatus(int taskId, TaskStatus newStatus) {
         for (Task t : taskList) {
             if (t.getId() == taskId) {
                 t.setStatus(newStatus);
                 updateTaskInDatabase(taskId, newStatus);
-                return;
+                return true;
             }
         }
-        System.out.println("Taak id " + taskId + " niet gevonden.");
+        return false;
     }
 
     private void updateTaskInDatabase(int taskId, TaskStatus s) {
@@ -444,8 +462,8 @@ class TrelloBoard {
         try (Connection conn = DriverManager.getConnection(url);
              PreparedStatement pstmtUnlink = conn.prepareStatement(sqlUnlink)) {
             pstmtUnlink.setInt(1, taskId);
-            int updated = pstmtUnlink.executeUpdate();
-            System.out.println("Ontkoppeld van " + updated + " bericht(en).");
+            int updatedCount = pstmtUnlink.executeUpdate();
+            System.out.println("Ontkoppeld van " + updatedCount + " bericht(en).");
         } catch (SQLException e) {
             System.out.println("Fout bij ontkoppelen berichtjes: " + e.getMessage());
         }
@@ -471,29 +489,78 @@ class TrelloBoard {
     }
 
     public Task getTaskById(int taskId) {
-        return taskList.stream().filter(t -> t.getId() == taskId).findFirst().orElse(null);
+        return taskList.stream()
+                .filter(t -> t.getId() == taskId)
+                .findFirst()
+                .orElse(null);
     }
 
     public void showTasks() {
+        final int width = 30;
+        String sep = "+" +
+                "-".repeat(width + 2) + "+" +
+                "-".repeat(width + 2) + "+" +
+                "-".repeat(width + 2) + "+" +
+                "-".repeat(width + 2) + "+";
+
+        // Header
         System.out.println("Trello-bord: " + name);
-        System.out.printf("%-20s %-20s %-20s %-20s%n", "TODO", "IN_PROGRESS", "REAVIEUW", "DONE");
-        System.out.println("--------------------------------------------------------------------");
+        System.out.println(sep);
+        System.out.printf("| %-" + width + "s | %-" + width + "s | %-" + width + "s | %-" + width + "s |%n",
+                "TODO", "IN_PROGRESS", "REAVIEUW", "DONE");
+        System.out.println(sep);
+
+        @SuppressWarnings("unchecked")
         ArrayList<Task>[] cols = new ArrayList[4];
         for (int i = 0; i < 4; i++) cols[i] = new ArrayList<>();
         for (Task t : taskList) cols[t.getStatus().ordinal()].add(t);
-        int max = 0; for (var c : cols) max = Math.max(max, c.size());
-        for (int i = 0; i < max; i++) {
-            for (int j = 0; j < 4; j++) {
-                if (i < cols[j].size()) {
-                    Task t = cols[j].get(i);
-                    System.out.printf("%-20s", t.getName() + " (id:" + t.getId() + ")");
-                } else {
-                    System.out.printf("%-20s", "");
+        int max = 0;
+        for (var c : cols) max = Math.max(max, c.size());
+
+        // Per rij: wrap en multi-line print
+        for (int row = 0; row < max; row++) {
+            @SuppressWarnings("unchecked")
+            List<String>[] cellLines = new List[4];
+            int rowHeight = 0;
+
+            // wrap elke kolomcel
+            for (int col = 0; col < 4; col++) {
+                String text = "";
+                if (row < cols[col].size()) {
+                    Task t = cols[col].get(row);
+                    text = t.getName() + " (id:" + t.getId() + ")";
                 }
-                System.out.print(j == 3 ? "\n" : " | ");
+                List<String> lines = wrapText(text, width);
+                cellLines[col] = lines;
+                rowHeight = Math.max(rowHeight, lines.size());
             }
+
+            // print alle lines voor deze rij
+            for (int li = 0; li < rowHeight; li++) {
+                System.out.print("| ");
+                for (int col = 0; col < 4; col++) {
+                    String part = li < cellLines[col].size() ? cellLines[col].get(li) : "";
+                    System.out.printf("%-" + width + "s", part);
+                    System.out.print(" | ");
+                }
+                System.out.println();
+            }
+            System.out.println(sep);
         }
-        System.out.println("--------------------------------------------------------------------");
+    }
+
+    /** Splits lange tekst in meerdere regels van max 'width' tekens, bij voorkeur op spaties. */
+    private static List<String> wrapText(String text, int width) {
+        List<String> lines = new ArrayList<>();
+        if (text == null) text = "";
+        while (text.length() > width) {
+            int split = text.lastIndexOf(' ', width);
+            if (split <= 0) split = width;
+            lines.add(text.substring(0, split));
+            text = text.substring(split).trim();
+        }
+        lines.add(text);
+        return lines;
     }
 }
 
@@ -503,7 +570,10 @@ class berichtje {
     private Integer taskid;
 
     public berichtje(int id, String afzender, String berichtje, Integer taskid) {
-        this.id = id; this.afzender = afzender; this.berichtje = berichtje; this.taskid = taskid;
+        this.id = id;
+        this.afzender = afzender;
+        this.berichtje = berichtje;
+        this.taskid = taskid;
     }
 
     public berichtje(int id, String afzender, String berichtje) {
@@ -535,7 +605,10 @@ class User {
     private ArrayList<Integer> berichtjesids = new ArrayList<>();
 
     public User(Integer id, String name, String email, String password) {
-        this.id = id; this.name = name; this.email = email; this.password = password;
+        this.id = id;
+        this.name = name;
+        this.email = email;
+        this.password = password;
     }
 
     public User(String name, String email, String password) {
@@ -599,7 +672,6 @@ class User {
                         rs.getString("email"),
                         rs.getString("password")
                 );
-                // laad gekoppelde berichtjes
                 try (PreparedStatement p2 = conn.prepareStatement(
                         "SELECT bericht_id FROM user_berichtjes WHERE user_id = ?")) {
                     p2.setInt(1, u.id);
