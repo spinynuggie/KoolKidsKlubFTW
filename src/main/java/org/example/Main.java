@@ -3,186 +3,180 @@ import java.util.List;
 import java.util.Scanner;
 import java.sql.*;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Scanner;
-import java.sql.*;
-
 public class Main {
     private static ArrayList<User> users = new ArrayList<>();
+    private static String currentUser = "gast";
 
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
         TrelloBoard board = new TrelloBoard("School Project");
-
-        // 1) Laad alle taken uit de database
         board.loadTasksFromDatabase();
-
-        // 2) Laad alle users uit de database
         users = User.loadUsersFromDatabase();
 
-        String ingelochtals = "gast";
-        boolean kleinmenu, kleinmenu2;
-
+        mainLoop:
         while (true) {
-            // Toon wie er ingelogd is
-            System.out.println("\n=== Ingelogd als: " + ingelochtals + " ===");
-
-            kleinmenu = true;
-            System.out.println("Wat wil je doen?");
+            System.out.println("\n=== Ingelogd als: " + currentUser + " ===");
             System.out.println("1. Taak aanmaken");
             System.out.println("2. Taak verplaatsen");
             System.out.println("3. Taak verwijderen");
             System.out.println("4. Taken tonen");
-            System.out.println("5. Beschrijving van een taak opvragen");
+            System.out.println("5. Beschrijving opvragen");
             System.out.println("6. User menu");
             System.out.println("7. Afsluiten");
+            // System.out.println("8. Taken zoeken");
             System.out.print("Kies een optie: ");
 
-            int keuze = scanner.nextInt();
-            scanner.nextLine();
-
+            String keuze = scanner.nextLine().trim();
             switch (keuze) {
-                case 1: // Taak aanmaken
-                    System.out.print("Voer de naam van de taak in: ");
-                    String naam = scanner.nextLine();
-                    System.out.print("Voer een beschrijving in: ");
-                    String beschrijving = scanner.nextLine();
-                    System.out.println("Kies een status: 1. TODO, 2. IN_PROGRESS, 3. REAVIEUW, 4. DONE");
-                    int statusKeuze = scanner.nextInt();
-                    scanner.nextLine();
+                case "1": {
+                    // Taak aanmaken
+                    String naam = readInput(scanner, "Voer de naam van de taak in");
+                    if (naam == null) break;
+                    String beschrijving = readInput(scanner, "Voer een beschrijving in");
+                    if (beschrijving == null) break;
+                    Integer statusKeuze = readIntInput(scanner,
+                            "Kies een status: 1. TODO, 2. IN_PROGRESS, 3. REVIEW, 4. DONE");
+                    if (statusKeuze == null) break;
+
                     TaskStatus status = switch (statusKeuze) {
                         case 1 -> TaskStatus.TODO;
                         case 2 -> TaskStatus.IN_PROGRESS;
-                        case 3 -> TaskStatus.REAVIEUW;
+                        case 3 -> TaskStatus.REVIEW;
                         case 4 -> TaskStatus.DONE;
                         default -> {
-                            System.out.println("Ongeldige keuze, standaard naar TODO.");
+                            System.out.println("Ongeldige keuze, standaard TODO.");
                             yield TaskStatus.TODO;
                         }
                     };
+
                     int newTaskId = Task.getNextTaskId();
                     Task nieuweTask = new Task(newTaskId, naam, beschrijving, status);
                     board.addTask(nieuweTask);
                     nieuweTask.saveToDatabase();
                     System.out.println("Taak toegevoegd en in DB opgeslagen!");
                     break;
+                }
+                case "2": {
+                    // Taak verplaatsen
+                    board.showTasks();
+                    Integer taakId = readIntInput(scanner, "Voer het ID van de taak in die je wilt verplaatsen");
+                    if (taakId == null) break;
+                    Integer ns = readIntInput(scanner,
+                            "Kies nieuwe status: 1. TODO, 2. IN_PROGRESS, 3. REVIEW, 4. DONE");
+                    if (ns == null) break;
 
-                case 2: // Taak verplaatsen
-                    System.out.print("Voer het ID van de taak in die je wilt verplaatsen: ");
-                    int taakIdVerplaats = scanner.nextInt();
-                    scanner.nextLine();
-                    System.out.println("Kies nieuwe status: 1. TODO, 2. IN_PROGRESS, 3. REAVIEUW, 4. DONE");
-                    int nieuweStatusKeuze = scanner.nextInt();
-                    scanner.nextLine();
-                    TaskStatus nieuweStatus = switch (nieuweStatusKeuze) {
+                    TaskStatus nieuweStatus = switch (ns) {
                         case 1 -> TaskStatus.TODO;
                         case 2 -> TaskStatus.IN_PROGRESS;
-                        case 3 -> TaskStatus.REAVIEUW;
+                        case 3 -> TaskStatus.REVIEW;
                         case 4 -> TaskStatus.DONE;
                         default -> {
-                            System.out.println("Ongeldige keuze, standaard naar TODO.");
+                            System.out.println("Ongeldige keuze, standaard TODO.");
                             yield TaskStatus.TODO;
                         }
                     };
-                    boolean updated = board.updateTaskStatus(taakIdVerplaats, nieuweStatus);
+
+                    boolean updated = board.updateTaskStatus(taakId, nieuweStatus);
                     if (updated) {
                         System.out.println("Taakstatus bijgewerkt!");
                         board.showTasks();
                     } else {
-                        System.out.println("Geen taak gevonden met ID " + taakIdVerplaats + ".");
+                        System.out.println("Geen taak gevonden met ID " + taakId + ".");
                     }
                     break;
-
-                case 3: // Taak verwijderen
-                    System.out.print("Voer het ID van de taak in die je wilt verwijderen: ");
-                    int taakIdDelete = scanner.nextInt();
-                    scanner.nextLine();
-                    board.removeTask(taakIdDelete);
-                    board.deleteTaskFromDatabase(taakIdDelete);
+                }
+                case "3": {
+                    // Taak verwijderen
+                    board.showTasks();
+                    Integer taakId = readIntInput(scanner, "Voer het ID van de taak in die je wilt verwijderen");
+                    if (taakId == null) break;
+                    board.removeTask(taakId);
+                    board.deleteTaskFromDatabase(taakId);
                     System.out.println("Taak verwijderd!");
                     break;
-
-                case 4: // Taken tonen
+                }
+                case "4":
                     board.showTasks();
                     break;
-
-                case 5: // Beschrijving opvragen
-                    System.out.print("Voer het ID van de taak in: ");
-                    int taakIdInfo = scanner.nextInt();
-                    scanner.nextLine();
-                    Task taak = board.getTaskById(taakIdInfo);
-                    if (taak != null) {
-                        System.out.println("Beschrijving: " + taak.getDescription());
+                case "5": {
+                    // Beschrijving opvragen
+                    Integer taakId = readIntInput(scanner, "Voer het ID van de taak in");
+                    if (taakId == null) break;
+                    Task t = board.getTaskById(taakId);
+                    if (t != null) {
+                        System.out.println("Beschrijving: " + t.getDescription());
                     } else {
-                        System.out.println("Taak met ID " + taakIdInfo + " bestaat niet.");
+                        System.out.println("Taak met ID " + taakId + " bestaat niet.");
                     }
                     break;
-
-                case 6: // User menu
-                    while (kleinmenu) {
-                        kleinmenu2 = true;
-                        // Toon wie er in het user-menu is ingelogd
-                        System.out.println("\n=== User-menu (ingelogd als: " + ingelochtals + ") ===");
+                }
+                case "6": {
+                    // User menu
+                    boolean inUserMenu = true;
+                    while (inUserMenu) {
+                        System.out.println("\n=== User-menu (ingelogd als: " + currentUser + ") ===");
                         System.out.println("1. User aanmaken");
                         System.out.println("2. User verwijderen");
                         System.out.println("3. Inloggen als user");
                         System.out.println("4. Berichtjes bekijken");
                         System.out.println("5. Berichtje versturen");
                         System.out.println("6. Terug naar hoofdmenu");
-                        System.out.print("Kies een optie: ");
+                        System.out.print("Kies een optie (of typ 'exit'): ");
 
-                        int k2 = scanner.nextInt();
-                        scanner.nextLine();
-                        switch (k2) {
-                            case 1: // User aanmaken
-                                System.out.print("Naam: ");
-                                String uNaam = scanner.nextLine();
-                                System.out.print("Email: ");
-                                String uEmail = scanner.nextLine();
-                                System.out.print("Wachtwoord: ");
-                                String uWacht = scanner.nextLine();
+                        String uchoice = scanner.nextLine().trim();
+                        if ("exit".equalsIgnoreCase(uchoice)) {
+                            System.out.println("Terug naar hoofdmenu.");
+                            break;
+                        }
+                        switch (uchoice) {
+                            case "1": {
+                                // User aanmaken
+                                String uNaam = readInput(scanner, "Naam");
+                                if (uNaam == null) break;
+                                String uEmail = readInput(scanner, "Email");
+                                if (uEmail == null) break;
+                                String uWacht = readInput(scanner, "Wachtwoord");
+                                if (uWacht == null) break;
                                 User newUser = new User(uNaam, uEmail, uWacht);
                                 newUser.insertUserIntoDatabase();
                                 users.add(newUser);
-                                ingelochtals = uNaam;
-                                System.out.println("User toegevoegd en in DB opgeslagen!");
+                                currentUser = uNaam;
+                                System.out.println("User toegevoegd en ingelogd!");
                                 break;
-
-                            case 2: // User verwijderen
-                                System.out.print("Naam user te verwijderen: ");
-                                String delNaam = scanner.nextLine();
+                            }
+                            case "2": {
+                                // User verwijderen
+                                String delNaam = readInput(scanner, "Naam user te verwijderen");
+                                if (delNaam == null) break;
                                 boolean verwijderd = users.removeIf(u -> u.getName().equals(delNaam));
-                                if (verwijderd) {
-                                    System.out.println("User \"" + delNaam + "\" verwijderd uit geheugen.");
-                                } else {
-                                    System.out.println("User niet gevonden.");
-                                }
+                                System.out.println(verwijderd
+                                        ? "User \"" + delNaam + "\" verwijderd."
+                                        : "User niet gevonden.");
                                 break;
-
-                            case 3: // Inloggen
-                                System.out.print("Naam: ");
-                                String loginNaam = scanner.nextLine();
-                                System.out.print("Wachtwoord: ");
-                                String loginWacht = scanner.nextLine();
+                            }
+                            case "3": {
+                                // Inloggen
+                                String loginNaam = readInput(scanner, "Naam");
+                                if (loginNaam == null) break;
+                                String loginWacht = readInput(scanner, "Wachtwoord");
+                                if (loginWacht == null) break;
                                 boolean found = false;
                                 for (User u : users) {
                                     if (u.getName().equals(loginNaam) && u.getPassword().equals(loginWacht)) {
-                                        ingelochtals = loginNaam;
+                                        currentUser = loginNaam;
                                         System.out.println("Inloggen gelukt! Welkom " + loginNaam);
                                         found = true;
                                         break;
                                     }
                                 }
-                                if (!found) {
-                                    System.out.println("Ongeldige credentials.");
-                                }
+                                if (!found) System.out.println("Ongeldige credentials.");
                                 break;
-
-                            case 4: // Berichtjes bekijken
-                                System.out.println("Laatste 10 berichtjes voor " + ingelochtals + ":");
+                            }
+                            case "4":
+                                // Berichtjes bekijken
+                                System.out.println("Laatste 10 berichtjes voor " + currentUser + ":");
                                 for (User u : users) {
-                                    if (u.getName().equals(ingelochtals)) {
+                                    if (u.getName().equals(currentUser)) {
                                         int teller = 0;
                                         for (int bid : u.getBerichtjesid()) {
                                             toonBerichtById(bid);
@@ -192,18 +186,22 @@ public class Main {
                                     }
                                 }
                                 break;
-
-                            case 5: // Berichtje versturen
-                                ArrayList<User> ontvangers = new ArrayList<>();
-                                while (kleinmenu2) {
+                            case "5": {
+                                // Berichtje versturen
+                                List<User> ontvangers = new ArrayList<>();
+                                boolean inRecipients = true;
+                                while (inRecipients) {
                                     System.out.println("\n1. Ontvanger toevoegen  2. Verstuur  3. Verwijder ontvanger  4. Stop");
-                                    System.out.print("Kies: ");
-                                    int k3 = scanner.nextInt();
-                                    scanner.nextLine();
-                                    switch (k3) {
-                                        case 1:
-                                            System.out.print("Naam ontvanger: ");
-                                            String onm = scanner.nextLine();
+                                    System.out.print("Kies (of typ 'exit'): ");
+                                    String rc = scanner.nextLine().trim();
+                                    if ("exit".equalsIgnoreCase(rc)) {
+                                        System.out.println("Bericht versturen geannuleerd.");
+                                        break;
+                                    }
+                                    switch (rc) {
+                                        case "1": {
+                                            String onm = readInput(scanner, "Naam ontvanger");
+                                            if (onm == null) break;
                                             users.stream()
                                                     .filter(u -> u.getName().equals(onm))
                                                     .findFirst()
@@ -212,95 +210,120 @@ public class Main {
                                                         System.out.println(onm + " toegevoegd.");
                                                     }, () -> System.out.println("Niet gevonden."));
                                             break;
-                                        case 2:
+                                        }
+                                        case "2": {
                                             if (ontvangers.isEmpty()) {
                                                 System.out.println("Geen ontvangers.");
                                             } else {
-                                                System.out.print("Bericht: ");
-                                                String msg = scanner.nextLine();
+                                                String msg = readInput(scanner, "Bericht");
+                                                if (msg == null) break;
                                                 System.out.print("Taak koppelen? (ja/nee): ");
-                                                String ans = scanner.nextLine();
+                                                String ans = scanner.nextLine().trim();
                                                 Integer koppeltaak = null;
                                                 if (ans.equalsIgnoreCase("ja")) {
                                                     board.showTasks();
-                                                    System.out.print("Taak ID: ");
-                                                    koppeltaak = scanner.nextInt();
-                                                    scanner.nextLine();
+                                                    koppeltaak = readIntInput(scanner, "Voer taak-ID in");
+                                                    if (koppeltaak == null) break;
                                                 }
                                                 int newMsgId = getNextBerichtId();
-                                                berichtje nb = new berichtje(newMsgId, ingelochtals, msg, koppeltaak);
+                                                berichtje nb = new berichtje(newMsgId, currentUser, msg, koppeltaak);
                                                 nb.zetBerichtInDatabase();
                                                 ontvangers.forEach(u -> u.ontvangberichtid(newMsgId));
                                                 System.out.println("Bericht verstuurd!");
                                             }
                                             break;
-                                        case 3:
-                                            System.out.print("Naam ontvanger weghalen: ");
-                                            String rem = scanner.nextLine();
-                                            if (ontvangers.removeIf(u -> u.getName().equals(rem))) {
-                                                System.out.println(rem + " verwijderd.");
-                                            } else {
-                                                System.out.println(rem + " niet in lijst.");
-                                            }
+                                        }
+                                        case "3": {
+                                            String rem = readInput(scanner, "Naam ontvanger weghalen");
+                                            if (rem == null) break;
+                                            boolean removed = ontvangers.removeIf(u -> u.getName().equals(rem));
+                                            System.out.println(removed ? rem + " verwijderd." : rem + " niet in lijst.");
                                             break;
-                                        case 4:
-                                            kleinmenu2 = false;
+                                        }
+                                        case "4":
+                                            inRecipients = false;
                                             break;
                                         default:
                                             System.out.println("Onbekende keuze.");
                                     }
-                                    if (!ontvangers.isEmpty() && kleinmenu2) {
+                                    if (!ontvangers.isEmpty() && inRecipients) {
                                         System.out.print("Ontvangers: ");
                                         ontvangers.forEach(u -> System.out.print(u.getName() + " "));
                                         System.out.println();
                                     }
                                 }
                                 break;
-
-                            case 6:
-                                kleinmenu = false;
+                            }
+                            case "6":
+                                inUserMenu = false;
                                 break;
-
                             default:
                                 System.out.println("Ongeldige keuze.");
                         }
                     }
                     break;
-
-                case 7:
+                }
+                case "7":
                     System.out.println("Programma afgesloten.");
-                    scanner.close();
-                    return;
-
+                    break mainLoop;
+                case "8": {
+                    String term = readInput(scanner, "Voer zoekterm in");
+                    if (term != null) {
+                        List<Task> found = board.searchTasks(term);
+                        if (found.isEmpty()) {
+                            System.out.println("Geen taken gevonden voor \"" + term + "\".");
+                        } else {
+                            System.out.println("Gevonden taken:");
+                            for (Task tt : found) {
+                                System.out.println("- " + tt.getName() + " (status: " + tt.getStatus() + ")");
+                            }
+                        }
+                    }
+                    break;
+                }
                 default:
                     System.out.println("Ongeldige keuze, probeer opnieuw.");
             }
         }
+
+        scanner.close();
+    }
+
+    private static String readInput(Scanner scanner, String prompt) {
+        System.out.print(prompt + " (of typ 'exit' om te annuleren): ");
+        String input = scanner.nextLine().trim();
+        return "exit".equalsIgnoreCase(input) ? null : input;
+    }
+
+    private static Integer readIntInput(Scanner scanner, String prompt) {
+        String s = readInput(scanner, prompt);
+        if (s == null) return null;
+        try {
+            return Integer.parseInt(s);
+        } catch (NumberFormatException e) {
+            System.out.println("Ongeldige invoer, probeer opnieuw.");
+            return readIntInput(scanner, prompt);
+        }
     }
 
     public static void toonBerichtById(int berichtId) {
-        String url = "jdbc:sqlite:sqlite3/teamflow.db";
-        String sql = "SELECT * FROM berichtjes WHERE id = ?";
+        String url = "jdbc:sqlite:sqlite3/Teamflow.db";
+        String sql = "SELECT afzender, berichtje, taskid, timestamp FROM berichtjes WHERE id = ?";
         try (Connection conn = DriverManager.getConnection(url);
              PreparedStatement p = conn.prepareStatement(sql)) {
             p.setInt(1, berichtId);
             try (ResultSet rs = p.executeQuery()) {
                 if (rs.next()) {
-                    int id = rs.getInt("id");
                     String afz = rs.getString("afzender");
                     String bericht = rs.getString("berichtje");
+                    Timestamp ts = rs.getTimestamp("timestamp");
                     int taskid = rs.getInt("taskid");
                     Task t = rs.wasNull() ? null : getTaskByIdFromDB(taskid);
-                    System.out.print("id:" + id + ", afzender:" + afz + ", berichtje:" + bericht);
+                    System.out.print("Afzender: " + afz + " | " + bericht);
                     if (t != null) {
-                        System.out.println(", taak:" + t.getName() +
-                                " (status:" + t.getStatus() +
-                                ", beschrijving:" + t.getDescription() + ")");
-                    } else {
-                        System.out.println(", geen gekoppelde taak.");
+                        System.out.print(" | taak: " + t.getName() + " (status:" + t.getStatus() + ")");
                     }
-                } else {
-                    System.out.println("Geen bericht met id " + berichtId);
+                    System.out.println(" | op: " + ts);
                 }
             }
         } catch (SQLException e) {
@@ -309,7 +332,7 @@ public class Main {
     }
 
     public static Task getTaskByIdFromDB(int taskId) {
-        String url = "jdbc:sqlite:sqlite3/teamflow.db";
+        String url = "jdbc:sqlite:sqlite3/Teamflow.db";
         String sql = "SELECT id, naam, beschrijving, status FROM tasks WHERE id = ?";
         try (Connection conn = DriverManager.getConnection(url);
              PreparedStatement p = conn.prepareStatement(sql)) {
@@ -331,7 +354,7 @@ public class Main {
     }
 
     public static int getNextBerichtId() {
-        String url = "jdbc:sqlite:sqlite3/teamflow.db";
+        String url = "jdbc:sqlite:sqlite3/Teamflow.db";
         String sql = "SELECT MAX(id) AS maxId FROM berichtjes";
         try (Connection conn = DriverManager.getConnection(url);
              Statement s = conn.createStatement();
@@ -349,7 +372,7 @@ public class Main {
 // ---- Overige klassen ----
 
 enum TaskStatus {
-    TODO, IN_PROGRESS, REAVIEUW, DONE
+    TODO, IN_PROGRESS, REVIEW, DONE
 }
 
 class Task {
@@ -360,7 +383,6 @@ class Task {
     public Task(int id, String name, String description, TaskStatus status) {
         this.id = id; this.name = name; this.description = description; this.status = status;
     }
-
     public int getId() { return id; }
     public String getName() { return name; }
     public String getDescription() { return description; }
@@ -368,7 +390,7 @@ class Task {
     public void setStatus(TaskStatus s) { this.status = s; }
 
     public static int getNextTaskId() {
-        String url = "jdbc:sqlite:sqlite3/teamflow.db";
+        String url = "jdbc:sqlite:sqlite3/Teamflow.db";
         String sql = "SELECT MAX(id) AS maxId FROM tasks";
         try (Connection conn = DriverManager.getConnection(url);
              Statement s = conn.createStatement();
@@ -383,7 +405,7 @@ class Task {
     }
 
     public void saveToDatabase() {
-        String url = "jdbc:sqlite:sqlite3/teamflow.db";
+        String url = "jdbc:sqlite:sqlite3/Teamflow.db";
         String sql = "INSERT INTO tasks (id, naam, beschrijving, status) VALUES (?, ?, ?, ?)";
         try (Connection conn = DriverManager.getConnection(url);
              PreparedStatement p = conn.prepareStatement(sql)) {
@@ -402,13 +424,11 @@ class TrelloBoard {
     private String name;
     private ArrayList<Task> taskList = new ArrayList<>();
 
-    public TrelloBoard(String name) {
-        this.name = name;
-    }
+    public TrelloBoard(String name) { this.name = name; }
 
     public void loadTasksFromDatabase() {
-        taskList.clear(); // eerst leegmaken
-        String url = "jdbc:sqlite:sqlite3/teamflow.db";
+        taskList.clear();
+        String url = "jdbc:sqlite:sqlite3/Teamflow.db";
         String sql = "SELECT id, naam, beschrijving, status FROM tasks";
         try (Connection conn = DriverManager.getConnection(url);
              Statement s = conn.createStatement();
@@ -426,9 +446,7 @@ class TrelloBoard {
         }
     }
 
-    public void addTask(Task t) {
-        taskList.add(t);
-    }
+    public void addTask(Task t) { taskList.add(t); }
 
     public boolean updateTaskStatus(int taskId, TaskStatus newStatus) {
         for (Task t : taskList) {
@@ -442,7 +460,7 @@ class TrelloBoard {
     }
 
     private void updateTaskInDatabase(int taskId, TaskStatus s) {
-        String url = "jdbc:sqlite:sqlite3/teamflow.db";
+        String url = "jdbc:sqlite:sqlite3/Teamflow.db";
         String sql = "UPDATE tasks SET status = ? WHERE id = ?";
         try (Connection conn = DriverManager.getConnection(url);
              PreparedStatement p = conn.prepareStatement(sql)) {
@@ -455,32 +473,22 @@ class TrelloBoard {
     }
 
     public void deleteTaskFromDatabase(int taskId) {
-        String url = "jdbc:sqlite:sqlite3/teamflow.db";
-
-        // 1) Ontkoppel eerst alle berichtjes die naar deze taak wijzen
+        String url = "jdbc:sqlite:sqlite3/Teamflow.db";
         String sqlUnlink = "UPDATE berichtjes SET taskid = NULL WHERE taskid = ?";
         try (Connection conn = DriverManager.getConnection(url);
-             PreparedStatement pstmtUnlink = conn.prepareStatement(sqlUnlink)) {
-            pstmtUnlink.setInt(1, taskId);
-            int updatedCount = pstmtUnlink.executeUpdate();
-            System.out.println("Ontkoppeld van " + updatedCount + " bericht(en).");
+             PreparedStatement pu = conn.prepareStatement(sqlUnlink)) {
+            pu.setInt(1, taskId);
+            pu.executeUpdate();
         } catch (SQLException e) {
             System.out.println("Fout bij ontkoppelen berichtjes: " + e.getMessage());
         }
-
-        // 2) Verwijder nu de taak zelf
         String sqlDelete = "DELETE FROM tasks WHERE id = ?";
         try (Connection conn = DriverManager.getConnection(url);
-             PreparedStatement pstmtDelete = conn.prepareStatement(sqlDelete)) {
-            pstmtDelete.setInt(1, taskId);
-            int deleted = pstmtDelete.executeUpdate();
-            if (deleted > 0) {
-                System.out.println("Taak " + taskId + " succesvol verwijderd uit DB.");
-            } else {
-                System.out.println("Geen taak gevonden met id: " + taskId);
-            }
+             PreparedStatement pd = conn.prepareStatement(sqlDelete)) {
+            pd.setInt(1, taskId);
+            pd.executeUpdate();
         } catch (SQLException e) {
-            System.out.println("Fout bij verwijderen taak uit DB: " + e.getMessage());
+            System.out.println("Fout bij verwijderen taak: " + e.getMessage());
         }
     }
 
@@ -489,78 +497,44 @@ class TrelloBoard {
     }
 
     public Task getTaskById(int taskId) {
-        return taskList.stream()
-                .filter(t -> t.getId() == taskId)
-                .findFirst()
-                .orElse(null);
+        return taskList.stream().filter(t -> t.getId() == taskId).findFirst().orElse(null);
     }
 
     public void showTasks() {
-        final int width = 30;
-        String sep = "+" +
-                "-".repeat(width + 2) + "+" +
-                "-".repeat(width + 2) + "+" +
-                "-".repeat(width + 2) + "+" +
-                "-".repeat(width + 2) + "+";
-
-        // Header
         System.out.println("Trello-bord: " + name);
+        String sep = "+" + "-".repeat(18) + "+" + "-".repeat(18) + "+" + "-".repeat(18) + "+" + "-".repeat(18) + "+";
         System.out.println(sep);
-        System.out.printf("| %-" + width + "s | %-" + width + "s | %-" + width + "s | %-" + width + "s |%n",
-                "TODO", "IN_PROGRESS", "REAVIEUW", "DONE");
+        System.out.printf("| %-16s | %-16s | %-16s | %-16s |%n",
+                "TODO","IN_PROGRESS","REVIEW","DONE");
         System.out.println(sep);
-
         @SuppressWarnings("unchecked")
-        ArrayList<Task>[] cols = new ArrayList[4];
+        List<Task>[] cols = new List[4];
         for (int i = 0; i < 4; i++) cols[i] = new ArrayList<>();
         for (Task t : taskList) cols[t.getStatus().ordinal()].add(t);
-        int max = 0;
-        for (var c : cols) max = Math.max(max, c.size());
-
-        // Per rij: wrap en multi-line print
+        int max = 0; for (var c : cols) max = Math.max(max, c.size());
         for (int row = 0; row < max; row++) {
-            @SuppressWarnings("unchecked")
-            List<String>[] cellLines = new List[4];
-            int rowHeight = 0;
-
-            // wrap elke kolomcel
+            System.out.print("| ");
             for (int col = 0; col < 4; col++) {
-                String text = "";
                 if (row < cols[col].size()) {
                     Task t = cols[col].get(row);
-                    text = t.getName() + " (id:" + t.getId() + ")";
+                    System.out.printf("%-16s | ", t.getName() + "("+t.getId()+")");
+                } else {
+                    System.out.print(" ".repeat(16) + " | ");
                 }
-                List<String> lines = wrapText(text, width);
-                cellLines[col] = lines;
-                rowHeight = Math.max(rowHeight, lines.size());
             }
-
-            // print alle lines voor deze rij
-            for (int li = 0; li < rowHeight; li++) {
-                System.out.print("| ");
-                for (int col = 0; col < 4; col++) {
-                    String part = li < cellLines[col].size() ? cellLines[col].get(li) : "";
-                    System.out.printf("%-" + width + "s", part);
-                    System.out.print(" | ");
-                }
-                System.out.println();
-            }
-            System.out.println(sep);
+            System.out.println();
         }
+        System.out.println(sep);
     }
 
-    /** Splits lange tekst in meerdere regels van max 'width' tekens, bij voorkeur op spaties. */
-    private static List<String> wrapText(String text, int width) {
-        List<String> lines = new ArrayList<>();
-        if (text == null) text = "";
-        while (text.length() > width) {
-            int split = text.lastIndexOf(' ', width);
-            if (split <= 0) split = width;
-            lines.add(text.substring(0, split));
-            text = text.substring(split).trim();
+    public List<Task> searchTasks(String keyword) {
+        List<Task> result = new ArrayList<>();
+        for (Task t : taskList) {
+            if (t.getName().toLowerCase().contains(keyword.toLowerCase())) {
+                result.add(t);
+            }
         }
-        lines.add(text);
-        return lines;
+        return result;
     }
 }
 
@@ -570,20 +544,11 @@ class berichtje {
     private Integer taskid;
 
     public berichtje(int id, String afzender, String berichtje, Integer taskid) {
-        this.id = id;
-        this.afzender = afzender;
-        this.berichtje = berichtje;
-        this.taskid = taskid;
+        this.id = id; this.afzender = afzender; this.berichtje = berichtje; this.taskid = taskid;
     }
-
-    public berichtje(int id, String afzender, String berichtje) {
-        this(id, afzender, berichtje, null);
-    }
-
-    public int getId() { return id; }
 
     public void zetBerichtInDatabase() {
-        String url = "jdbc:sqlite:sqlite3/teamflow.db";
+        String url = "jdbc:sqlite:sqlite3/Teamflow.db";
         String sql = "INSERT INTO berichtjes (id, afzender, berichtje, taskid) VALUES (?, ?, ?, ?)";
         try (Connection conn = DriverManager.getConnection(url);
              PreparedStatement p = conn.prepareStatement(sql)) {
@@ -600,36 +565,28 @@ class berichtje {
 }
 
 class User {
-    private Integer id;
+    Integer id;
     private String name, email, password;
     private ArrayList<Integer> berichtjesids = new ArrayList<>();
 
     public User(Integer id, String name, String email, String password) {
-        this.id = id;
-        this.name = name;
-        this.email = email;
-        this.password = password;
+        this.id = id; this.name = name; this.email = email; this.password = password;
     }
-
     public User(String name, String email, String password) {
         this(null, name, email, password);
     }
-
     public String getName() { return name; }
     public String getPassword() { return password; }
-
     public int[] getBerichtjesid() {
         return berichtjesids.stream().mapToInt(i -> i).toArray();
     }
-
     public void ontvangberichtid(int berichtId) {
         berichtjesids.add(berichtId);
         insertUserBerichtLink(id, berichtId);
     }
-
     public static void insertUserBerichtLink(Integer userId, int berichtId) {
         if (userId == null) return;
-        String url = "jdbc:sqlite:sqlite3/teamflow.db";
+        String url = "jdbc:sqlite:sqlite3/Teamflow.db";
         String sql = "INSERT INTO user_berichtjes (user_id, bericht_id) VALUES (?, ?)";
         try (Connection conn = DriverManager.getConnection(url);
              PreparedStatement p = conn.prepareStatement(sql)) {
@@ -642,7 +599,7 @@ class User {
     }
 
     public void insertUserIntoDatabase() {
-        String url = "jdbc:sqlite:sqlite3/teamflow.db";
+        String url = "jdbc:sqlite:sqlite3/Teamflow.db";
         String sql = "INSERT INTO users (name, email, password) VALUES (?, ?, ?)";
         try (Connection conn = DriverManager.getConnection(url);
              PreparedStatement p = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
@@ -660,8 +617,8 @@ class User {
 
     public static ArrayList<User> loadUsersFromDatabase() {
         ArrayList<User> list = new ArrayList<>();
-        String url = "jdbc:sqlite:sqlite3/teamflow.db";
-        String sql = "SELECT id, name, email, password FROM users";
+        String url = "jdbc:sqlite:sqlite3/Teamflow.db";
+        String sql = "SELECT id,name,email,password FROM users";
         try (Connection conn = DriverManager.getConnection(url);
              Statement s = conn.createStatement();
              ResultSet rs = s.executeQuery(sql)) {
