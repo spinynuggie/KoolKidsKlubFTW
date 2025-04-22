@@ -7,11 +7,16 @@ public class Main {
     private static ArrayList<User> users = new ArrayList<>();
     private static String currentUser = "gast";
 
+    private static List<UserStory> userStories = new ArrayList<>();
+    private static List<Epic> epics = new ArrayList<>();
+
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
         TrelloBoard board = new TrelloBoard("School Project");
         board.loadTasksFromDatabase();
         users = User.loadUsersFromDatabase();
+        userStories = UserStory.loadFromDatabase();
+        epics = Epic.loadFromDatabase(userStories, board);
 
         mainLoop:
         while (true) {
@@ -22,8 +27,8 @@ public class Main {
             System.out.println("4. Taken tonen");
             System.out.println("5. Beschrijving opvragen");
             System.out.println("6. User menu");
-            System.out.println("7. Afsluiten");
-            // System.out.println("8. Taken zoeken");
+            System.out.println("7. Epics/user stories");
+            System.out.println("8. Afsluiten");
             System.out.print("Kies een optie: ");
 
             String keuze = scanner.nextLine().trim();
@@ -120,8 +125,7 @@ public class Main {
                         System.out.println("3. Inloggen als user");
                         System.out.println("4. Berichtjes bekijken");
                         System.out.println("5. Berichtje versturen");
-                        System.out.println("6. Terug naar hoofdmenu");
-                        System.out.print("Kies een optie (of typ 'exit'): ");
+                        System.out.print("Kies een optie (of typ 'exit' om terug te gaan naar het hoofdmenu): ");
 
                         String uchoice = scanner.nextLine().trim();
                         if ("exit".equalsIgnoreCase(uchoice)) {
@@ -254,29 +258,63 @@ public class Main {
                                 }
                                 break;
                             }
-                            case "6":
-                                inUserMenu = false;
-                                break;
                             default:
                                 System.out.println("Ongeldige keuze.");
                         }
                     }
                     break;
                 }
-                case "7":
+                case "8":
                     System.out.println("Programma afgesloten.");
                     break mainLoop;
-                case "8": {
-                    String term = readInput(scanner, "Voer zoekterm in");
-                    if (term != null) {
-                        List<Task> found = board.searchTasks(term);
-                        if (found.isEmpty()) {
-                            System.out.println("Geen taken gevonden voor \"" + term + "\".");
-                        } else {
-                            System.out.println("Gevonden taken:");
-                            for (Task tt : found) {
-                                System.out.println("- " + tt.getName() + " (status: " + tt.getStatus() + ")");
-                            }
+                case "7": {
+                    while (true) {
+                        System.out.println("\nWat wil je doen?");
+                        System.out.println("1. User Story aanmaken");
+                        System.out.println("2. Epic aanmaken (en user stories koppelen)");
+                        System.out.println("3. Taak toevoegen aan een epic");
+                        System.out.println("4. Epics tonen (met gelinkte user stories/taken)");
+                        System.out.println("5. Toon alle User Stories");
+                        System.out.println("6. Verwijder een User Story");
+                        System.out.println("7. Verwijder een Epic");
+                        System.out.println("0. Stoppen");
+                        System.out.print("Maak een keuze: ");
+                        int keuzesub = scanner.nextInt();
+                        scanner.nextLine();  // Consume newline
+
+                        if (keuzesub == 0) break;
+
+                        switch (keuzesub) {
+                            case 1:
+                                userStoryAanmaken(scanner);
+                                break;
+                            case 2:
+                                epicAanmaken(scanner);
+                                break;
+                            case 3:
+                                taakToevoegen(scanner, board);
+                                break;
+                            case 4:
+                                toonAlles();
+                                break;
+                            case 5:
+                                System.out.println("\n-- Alle User Stories --");
+                                if (userStories.isEmpty()) {
+                                    System.out.println("Geen user stories gevonden.");
+                                } else {
+                                    for (UserStory us : userStories) {
+                                        System.out.println(" - " + us);
+                                    }
+                                }
+                                break;
+                            case 6:
+                                verwijderUserStory(scanner);
+                                break;
+                            case 7:
+                                verwijderEpic(scanner);
+                                break;
+                            default:
+                                System.out.println("Ongeldige keuze.");
                         }
                     }
                     break;
@@ -307,7 +345,7 @@ public class Main {
     }
 
     public static void toonBerichtById(int berichtId) {
-        String url = "jdbc:sqlite:sqlite3/Teamflow.db";
+        String url = "jdbc:sqlite:sqlite3/teamflow.db";
         String sql = "SELECT afzender, berichtje, taskid, timestamp FROM berichtjes WHERE id = ?";
         try (Connection conn = DriverManager.getConnection(url);
              PreparedStatement p = conn.prepareStatement(sql)) {
@@ -332,7 +370,7 @@ public class Main {
     }
 
     public static Task getTaskByIdFromDB(int taskId) {
-        String url = "jdbc:sqlite:sqlite3/Teamflow.db";
+        String url = "jdbc:sqlite:sqlite3/teamflow.db";
         String sql = "SELECT id, naam, beschrijving, status FROM tasks WHERE id = ?";
         try (Connection conn = DriverManager.getConnection(url);
              PreparedStatement p = conn.prepareStatement(sql)) {
@@ -354,7 +392,7 @@ public class Main {
     }
 
     public static int getNextBerichtId() {
-        String url = "jdbc:sqlite:sqlite3/Teamflow.db";
+        String url = "jdbc:sqlite:sqlite3/teamflow.db";
         String sql = "SELECT MAX(id) AS maxId FROM berichtjes";
         try (Connection conn = DriverManager.getConnection(url);
              Statement s = conn.createStatement();
@@ -367,9 +405,167 @@ public class Main {
             return -1;
         }
     }
-}
 
-// ---- Overige klassen ----
+    private static void userStoryAanmaken(Scanner scanner) {
+        System.out.print("Naam van de user story: ");
+        String naam = scanner.nextLine();
+        System.out.print("Beschrijving: ");
+        String beschrijving = scanner.nextLine();
+        UserStory story = new UserStory(naam, beschrijving);
+        story.saveToDatabase();
+        userStories.add(story);
+        System.out.println("User story toegevoegd en in DB opgeslagen!");
+    }
+
+    private static void epicAanmaken(Scanner scanner) {
+        System.out.print("Titel van de epic: ");
+        String titel = scanner.nextLine();
+        Epic epic = new Epic(titel);
+        epic.saveToDatabase();
+        if (userStories.isEmpty()) {
+            System.out.println("Geen user stories beschikbaar om te koppelen.");
+        } else {
+            System.out.println("Kies de nummers van de user stories om toe te voegen aan deze epic (gescheiden door komma's):");
+            for (int i = 0; i < userStories.size(); i++) {
+                UserStory us = userStories.get(i);
+                System.out.println(i + ": " + us.getNaam() + " – " + us.getBeschrijving());
+            }
+            System.out.print("Voer nummers in: ");
+            String input = scanner.nextLine();
+            String[] indices = input.split(",");
+            for (String indexStr : indices) {
+                try {
+                    int index = Integer.parseInt(indexStr.trim());
+                    if (index >= 0 && index < userStories.size()) {
+                        epic.voegUserStoryToe(userStories.get(index));
+                    }
+                } catch (NumberFormatException ignored) {}
+            }
+        }
+        epics.add(epic);
+        System.out.println("Epic toegevoegd!");
+    }
+
+    private static void verwijderUserStory(Scanner scanner) {
+        if (userStories.isEmpty()) {
+            System.out.println("Geen user stories om te verwijderen.");
+            return;
+        }
+        System.out.println("\nKies de index van de te verwijderen User Story:");
+        for (int i = 0; i < userStories.size(); i++) {
+            UserStory us = userStories.get(i);
+            // toon alleen naam en beschrijving
+            System.out.println(i + ": " + us.getNaam() + " - " + us.getBeschrijving());
+        }
+        System.out.print("Voer het nummer in (of typ 'exit'): ");
+        String in = scanner.nextLine().trim();
+        if ("exit".equalsIgnoreCase(in)) return;
+
+        try {
+            int idx = Integer.parseInt(in);
+            if (idx < 0 || idx >= userStories.size()) throw new NumberFormatException();
+            int usId = userStories.get(idx).getId();
+
+            // Verwijder uit DB
+            String url = "jdbc:sqlite:teamflow.db";
+            try (Connection conn = DriverManager.getConnection(url);
+                 PreparedStatement p = conn.prepareStatement(
+                         "DELETE FROM userstories WHERE id = ?")) {
+                p.setInt(1, usId);
+                p.executeUpdate();
+            }
+
+            // Verwijder uit lijst
+            userStories.remove(idx);
+            System.out.println("User Story verwijderd!");
+        } catch (NumberFormatException e) {
+            System.out.println("Ongeldige index.");
+        } catch (SQLException e) {
+            System.out.println("Fout bij verwijderen uit DB: " + e.getMessage());
+        }
+    }
+
+
+    private static void verwijderEpic(Scanner scanner) {
+        if (epics.isEmpty()) {
+            System.out.println("Geen epics om te verwijderen.");
+            return;
+        }
+        System.out.println("\nKies de nummer van de te verwijderen Epic:");
+        for (int i = 0; i < epics.size(); i++) {
+            System.out.println(i + ": " + epics.get(i).getTitel());
+        }
+        System.out.print("Voer het nummer in (of typ 'exit'): ");
+        String in = scanner.nextLine().trim();
+        if ("exit".equalsIgnoreCase(in)) return;
+        try {
+            int idx = Integer.parseInt(in);
+            if (idx < 0 || idx >= epics.size()) throw new NumberFormatException();
+            int epicId = epics.get(idx).getId();
+            // 1) Verwijder uit DB (cascade in epic_user_stories/epic_tasks)
+            String url = "jdbc:sqlite:teamflow.db";
+            try (Connection conn = DriverManager.getConnection(url);
+                 PreparedStatement p = conn.prepareStatement(
+                         "DELETE FROM epics WHERE id = ?")) {
+                p.setInt(1, epicId);
+                p.executeUpdate();
+            }
+            // 2) Verwijder uit lijst
+            epics.remove(idx);
+            System.out.println("Epic verwijderd!");
+        } catch (NumberFormatException e) {
+            System.out.println("Ongeldige index.");
+        } catch (SQLException e) {
+            System.out.println("Fout bij verwijderen uit DB: " + e.getMessage());
+        }
+    }
+
+    private static void taakToevoegen(Scanner scanner, TrelloBoard board) {
+        if (epics.isEmpty()) {
+            System.out.println("Geen epics beschikbaar.");
+            return;
+        }
+        // 1) Laat de beschikbare epics zien
+        System.out.println("Kies een epic om een taak aan toe te voegen:");
+        for (int i = 0; i < epics.size(); i++) {
+            System.out.println(i + ": " + epics.get(i).getTitel());
+        }
+        System.out.print("Voer het nummer in: ");
+        int index = scanner.nextInt();
+        scanner.nextLine();  // Consume newline
+        if (index >= 0 && index < epics.size()) {
+            // 2) Print alle taken voordat je om de taak‑ID vraagt
+            System.out.println("\nBeschikbare taken:");
+            board.showTasks();
+
+            // 3) Vraag de taak‑ID
+            Integer taakId = readIntInput(scanner, "Voer het ID van de taak in");
+            if (taakId == null) {
+                System.out.println("Koppeling geannuleerd.");
+                return;
+            }
+
+            Task t = board.getTaskById(taakId);
+            if (t != null) {
+                epics.get(index).voegTaakToe(t);
+                System.out.println("Taak toegevoegd!");
+            } else {
+                System.out.println("Taak niet gevonden.");
+            }
+        } else {
+            System.out.println("Ongeldige keuze.");
+        }
+    }
+    private static void toonAlles() {
+        if (epics.isEmpty()) {
+            System.out.println("Nog geen epics aangemaakt.");
+        } else {
+            for (Epic epic : epics) {
+                System.out.println("\n" + epic);
+            }
+        }
+    }
+}
 
 enum TaskStatus {
     TODO, IN_PROGRESS, REVIEW, DONE
@@ -389,8 +585,13 @@ class Task {
     public TaskStatus getStatus() { return status; }
     public void setStatus(TaskStatus s) { this.status = s; }
 
+    @Override
+    public String toString() {
+        return name + " (" + id + ")";
+    }
+
     public static int getNextTaskId() {
-        String url = "jdbc:sqlite:sqlite3/Teamflow.db";
+        String url = "jdbc:sqlite:sqlite3/teamflow.db";
         String sql = "SELECT MAX(id) AS maxId FROM tasks";
         try (Connection conn = DriverManager.getConnection(url);
              Statement s = conn.createStatement();
@@ -405,7 +606,7 @@ class Task {
     }
 
     public void saveToDatabase() {
-        String url = "jdbc:sqlite:sqlite3/Teamflow.db";
+        String url = "jdbc:sqlite:sqlite3/teamflow.db";
         String sql = "INSERT INTO tasks (id, naam, beschrijving, status) VALUES (?, ?, ?, ?)";
         try (Connection conn = DriverManager.getConnection(url);
              PreparedStatement p = conn.prepareStatement(sql)) {
@@ -428,7 +629,7 @@ class TrelloBoard {
 
     public void loadTasksFromDatabase() {
         taskList.clear();
-        String url = "jdbc:sqlite:sqlite3/Teamflow.db";
+        String url = "jdbc:sqlite:sqlite3/teamflow.db";
         String sql = "SELECT id, naam, beschrijving, status FROM tasks";
         try (Connection conn = DriverManager.getConnection(url);
              Statement s = conn.createStatement();
@@ -460,7 +661,7 @@ class TrelloBoard {
     }
 
     private void updateTaskInDatabase(int taskId, TaskStatus s) {
-        String url = "jdbc:sqlite:sqlite3/Teamflow.db";
+        String url = "jdbc:sqlite:sqlite3/teamflow.db";
         String sql = "UPDATE tasks SET status = ? WHERE id = ?";
         try (Connection conn = DriverManager.getConnection(url);
              PreparedStatement p = conn.prepareStatement(sql)) {
@@ -473,7 +674,7 @@ class TrelloBoard {
     }
 
     public void deleteTaskFromDatabase(int taskId) {
-        String url = "jdbc:sqlite:sqlite3/Teamflow.db";
+        String url = "jdbc:sqlite:sqlite3/teamflow.db";
         String sqlUnlink = "UPDATE berichtjes SET taskid = NULL WHERE taskid = ?";
         try (Connection conn = DriverManager.getConnection(url);
              PreparedStatement pu = conn.prepareStatement(sqlUnlink)) {
@@ -526,16 +727,6 @@ class TrelloBoard {
         }
         System.out.println(sep);
     }
-
-    public List<Task> searchTasks(String keyword) {
-        List<Task> result = new ArrayList<>();
-        for (Task t : taskList) {
-            if (t.getName().toLowerCase().contains(keyword.toLowerCase())) {
-                result.add(t);
-            }
-        }
-        return result;
-    }
 }
 
 class berichtje {
@@ -548,7 +739,7 @@ class berichtje {
     }
 
     public void zetBerichtInDatabase() {
-        String url = "jdbc:sqlite:sqlite3/Teamflow.db";
+        String url = "jdbc:sqlite:sqlite3/teamflow.db";
         String sql = "INSERT INTO berichtjes (id, afzender, berichtje, taskid) VALUES (?, ?, ?, ?)";
         try (Connection conn = DriverManager.getConnection(url);
              PreparedStatement p = conn.prepareStatement(sql)) {
@@ -586,7 +777,7 @@ class User {
     }
     public static void insertUserBerichtLink(Integer userId, int berichtId) {
         if (userId == null) return;
-        String url = "jdbc:sqlite:sqlite3/Teamflow.db";
+        String url = "jdbc:sqlite:sqlite3/teamflow.db";
         String sql = "INSERT INTO user_berichtjes (user_id, bericht_id) VALUES (?, ?)";
         try (Connection conn = DriverManager.getConnection(url);
              PreparedStatement p = conn.prepareStatement(sql)) {
@@ -599,7 +790,7 @@ class User {
     }
 
     public void insertUserIntoDatabase() {
-        String url = "jdbc:sqlite:sqlite3/Teamflow.db";
+        String url = "jdbc:sqlite:sqlite3/teamflow.db";
         String sql = "INSERT INTO users (name, email, password) VALUES (?, ?, ?)";
         try (Connection conn = DriverManager.getConnection(url);
              PreparedStatement p = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
@@ -617,7 +808,7 @@ class User {
 
     public static ArrayList<User> loadUsersFromDatabase() {
         ArrayList<User> list = new ArrayList<>();
-        String url = "jdbc:sqlite:sqlite3/Teamflow.db";
+        String url = "jdbc:sqlite:sqlite3/teamflow.db";
         String sql = "SELECT id,name,email,password FROM users";
         try (Connection conn = DriverManager.getConnection(url);
              Statement s = conn.createStatement();
@@ -644,5 +835,178 @@ class User {
             System.out.println("Fout bij laden users: " + e.getMessage());
         }
         return list;
+    }
+}
+
+class UserStory {
+    private int id;
+    private String naam;
+    private String beschrijving;
+
+    public UserStory(int id, String naam, String beschrijving) {
+        this.id = id; this.naam = naam; this.beschrijving = beschrijving;
+    }
+    public UserStory(String naam, String beschrijving) {
+        this(-1, naam, beschrijving);
+    }
+    public int getId() { return id; }
+    public String getNaam() { return naam; }
+    public String getBeschrijving() { return beschrijving; }
+
+    public void saveToDatabase() {
+        String url = "jdbc:sqlite:sqlite3/teamflow.db";
+        String sql = "INSERT INTO userstories (naam, beschrijving) VALUES (?, ?)";
+        try (Connection conn = DriverManager.getConnection(url);
+             PreparedStatement p = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+            p.setString(1, naam);
+            p.setString(2, beschrijving);
+            p.executeUpdate();
+            try (ResultSet rs = p.getGeneratedKeys()) {
+                if (rs.next()) id = rs.getInt(1);
+            }
+        } catch (SQLException e) {
+            System.out.println("Fout bij opslaan user story: " + e.getMessage());
+        }
+    }
+
+    public static List<UserStory> loadFromDatabase() {
+        List<UserStory> list = new ArrayList<>();
+        String url = "jdbc:sqlite:sqlite3/teamflow.db";
+        String sql = "SELECT id, naam, beschrijving FROM userstories";
+        try (Connection conn = DriverManager.getConnection(url);
+             Statement s = conn.createStatement();
+             ResultSet rs = s.executeQuery(sql)) {
+            while (rs.next()) {
+                list.add(new UserStory(
+                        rs.getInt("id"),
+                        rs.getString("naam"),
+                        rs.getString("beschrijving")
+                ));
+            }
+        } catch (SQLException e) {
+            System.out.println("Fout bij laden user stories: " + e.getMessage());
+        }
+        return list;
+    }
+
+    @Override
+    public String toString() {
+        return "[" + id + "] " + naam + " - " + beschrijving;
+    }
+}
+
+class Epic {
+    private int id;
+    private String titel;
+    private List<UserStory> userStories = new ArrayList<>();
+    private List<Task> taken = new ArrayList<>();
+
+    public Epic(int id, String titel) {
+        this.id = id; this.titel = titel;
+    }
+    public Epic(String titel) {
+        this(-1, titel);
+    }
+    public int getId() { return id; }
+    public String getTitel() { return titel; }
+
+    public void saveToDatabase() {
+        String url = "jdbc:sqlite:sqlite3/teamflow.db";
+        String sql = "INSERT INTO epics (titel) VALUES (?)";
+        try (Connection conn = DriverManager.getConnection(url);
+             PreparedStatement p = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+            p.setString(1, titel);
+            p.executeUpdate();
+            try (ResultSet rs = p.getGeneratedKeys()) {
+                if (rs.next()) id = rs.getInt(1);
+            }
+        } catch (SQLException e) {
+            System.out.println("Fout bij opslaan epic: " + e.getMessage());
+        }
+    }
+
+    public void voegUserStoryToe(UserStory story) {
+        userStories.add(story);
+        String url = "jdbc:sqlite:sqlite3/teamflow.db";
+        String sql = "INSERT INTO epic_user_stories (epic_id, userstory_id) VALUES (?, ?)";
+        try (Connection conn = DriverManager.getConnection(url);
+             PreparedStatement p = conn.prepareStatement(sql)) {
+            p.setInt(1, id);
+            p.setInt(2, story.getId());
+            p.executeUpdate();
+        } catch (SQLException e) {
+            System.out.println("Fout bij koppelen user story aan epic: " + e.getMessage());
+        }
+    }
+
+    public void voegTaakToe(Task taak) {
+        taken.add(taak);
+        String url = "jdbc:sqlite:sqlite3/teamflow.db";
+        String sql = "INSERT INTO epic_tasks (epic_id, task_id) VALUES (?, ?)";
+        try (Connection conn = DriverManager.getConnection(url);
+             PreparedStatement p = conn.prepareStatement(sql)) {
+            p.setInt(1, id);
+            p.setInt(2, taak.getId());
+            p.executeUpdate();
+        } catch (SQLException e) {
+            System.out.println("Fout bij koppelen taak aan epic: " + e.getMessage());
+        }
+    }
+
+    public static List<Epic> loadFromDatabase(List<UserStory> allUserStories, TrelloBoard board) {
+        List<Epic> list = new ArrayList<>();
+        String url = "jdbc:sqlite:sqlite3/teamflow.db";
+        String sqlEpics = "SELECT id, titel FROM epics";
+        try (Connection conn = DriverManager.getConnection(url);
+             Statement s = conn.createStatement();
+             ResultSet rs = s.executeQuery(sqlEpics)) {
+            while (rs.next()) {
+                int epicId = rs.getInt("id");
+                Epic epic = new Epic(epicId, rs.getString("titel"));
+                // load linked user stories
+                String sqlUS = "SELECT userstory_id FROM epic_user_stories WHERE epic_id = ?";
+                try (PreparedStatement p2 = conn.prepareStatement(sqlUS)) {
+                    p2.setInt(1, epicId);
+                    try (ResultSet rs2 = p2.executeQuery()) {
+                        while (rs2.next()) {
+                            int usId = rs2.getInt("userstory_id");
+                            allUserStories.stream()
+                                    .filter(us -> us.getId() == usId)
+                                    .findFirst()
+                                    .ifPresent(epic.userStories::add);
+                        }
+                    }
+                }
+                // load linked tasks
+                String sqlTasks = "SELECT task_id FROM epic_tasks WHERE epic_id = ?";
+                try (PreparedStatement p3 = conn.prepareStatement(sqlTasks)) {
+                    p3.setInt(1, epicId);
+                    try (ResultSet rs3 = p3.executeQuery()) {
+                        while (rs3.next()) {
+                            Task t = board.getTaskById(rs3.getInt("task_id"));
+                            if (t != null) epic.taken.add(t);
+                        }
+                    }
+                }
+                list.add(epic);
+            }
+        } catch (SQLException e) {
+            System.out.println("Fout bij laden epics: " + e.getMessage());
+        }
+        return list;
+    }
+
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder("Epic [" + id + "] " + titel + "\n");
+        sb.append("User Stories:\n");
+        for (UserStory us : userStories) {
+            sb.append(" - ").append(us).append("\n");
+        }
+        sb.append("Taken:\n");
+        for (Task t : taken) {
+            sb.append(" - ").append(t).append("\n");
+        }
+        return sb.toString();
     }
 }
